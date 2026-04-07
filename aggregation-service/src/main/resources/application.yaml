@@ -9,4 +9,6 @@ clients:
     base-url: http://localhost:8082
   availability:
     base-url: http://localhost:8083
+  customer:
+    base-url: http://localhost:8084
 

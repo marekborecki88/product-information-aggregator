@@ -1,8 +1,9 @@
 package com.example.aggregation_service.productdetails.api.service
 
 import com.example.aggregation_service.productdetails.api.dto.ProductResponse
- import com.example.aggregation_service.productdetails.application.port.out.AvailabilityClient
+import com.example.aggregation_service.productdetails.application.port.out.AvailabilityClient
 import com.example.aggregation_service.productdetails.application.port.out.CatalogProductClient
+import com.example.aggregation_service.productdetails.application.port.out.CustomerClient
 import com.example.aggregation_service.productdetails.application.port.out.PricingClient
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
@@ -12,7 +13,8 @@ import org.springframework.stereotype.Service
 class ProductService(
     private val catalogProductClient: CatalogProductClient,
     private val pricingClient: PricingClient,
-    private val availabilityClient: AvailabilityClient
+    private val availabilityClient: AvailabilityClient,
+    private val customerClient: CustomerClient
 ) {
     fun findProductById(productId: Int, market: Market, customerId: Int?): ProductResponse {
         val catalogProduct = catalogProductClient.findByProductIdAndMarket(
@@ -31,12 +33,15 @@ class ProductService(
             market = market
         ) ?: throw NoSuchElementException("Availability for product $productId not found in market ${market.code}")
 
+        val customerPayload = customerId?.let { customerClient.findByCustomerId(it) }
+
         return ProductResponse(
             id = productId,
             details = catalogProduct,
             priceInfo = pricePayload,
             availabilityInfo = availabilityPayload,
-            customerId = customerId
+            customerId = customerId,
+            customerPayload = customerPayload
         )
     }
 }
