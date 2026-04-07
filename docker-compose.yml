@@ -19,6 +19,13 @@ services:
     networks:
       - app-network
 
+  price-mock-service:
+    build: ./price-mock-service
+    ports:
+      - "8082:8080"
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
