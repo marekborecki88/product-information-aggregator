@@ -12,8 +12,4 @@ COPY --from=builder /app/server .
 
 EXPOSE 8080
 
-# Entrypoint allows passing additional flags during 'docker run'
-ENTRYPOINT ["./server"]
-
-# Default values if no arguments are provided
-CMD ["-path", "/mock", "-body", "{\"message\": \"default\"}", "-delay", "0"]
+CMD ["./server"]

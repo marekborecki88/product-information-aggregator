@@ -1,3 +1,8 @@
 spring:
   application:
     name: aggregation-service
+
+clients:
+  catalog:
+    base-url: http://catalog-mock-service:8080
+

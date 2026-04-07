@@ -9,6 +9,7 @@ import java.math.BigDecimal
 @Service
 class ProductDetailsService {
     fun findProductById(productId: Int, market: Market, customerId: Int?): ProductDetailsResponse {
+
         return ProductDetailsResponse(
             id = productId,
             name = "Product $productId",
