@@ -1,15 +1,13 @@
-version: '3.8'
-
 services:
   aggregation-service:
     build: ./aggregation-service
     ports:
       - "8080:8080"
     environment:
-      - CATALOG_CLIENT_BASE_URL=http://catalog-mock-service:8080
-      - CLIENTS_PRICING_BASE_URL=http://price-mock-service:8080
-      - CLIENTS_AVAILABILITY_BASE_URL=http://availability-mock-service:8080
-      - CLIENTS_CUSTOMER_BASE_URL=http://customer-mock-service:8080
+      - CLIENT_CATALOG_BASE_URL=http://catalog-mock-service:8080
+      - CLIENT_PRICING_BASE_URL=http://price-mock-service:8080
+      - CLIENT_AVAILABILITY_BASE_URL=http://availability-mock-service:8080
+      - CLIENT_CUSTOMER_BASE_URL=http://customer-mock-service:8080
     depends_on:
       - catalog-mock-service
       - price-mock-service

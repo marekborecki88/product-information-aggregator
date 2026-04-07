@@ -7,12 +7,13 @@ import com.example.aggregation_service.productdetails.infrastructure.client.conf
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CatalogProductPayload
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
 
 @Component
 class CatalogProductClientHttp(
-    properties: CatalogClientProperties
+    private val properties: CatalogClientProperties
 ) : CatalogProductClient {
 
     private val log = LoggerFactory.getLogger(javaClass)
