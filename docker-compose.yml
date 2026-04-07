@@ -26,6 +26,13 @@ services:
     networks:
       - app-network
 
+  availability-mock-service:
+    build: ./availability-mock-service
+    ports:
+      - "8083:8080"
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge
