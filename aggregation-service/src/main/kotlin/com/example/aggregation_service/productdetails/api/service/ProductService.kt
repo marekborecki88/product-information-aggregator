@@ -26,7 +26,7 @@ class ProductService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun findProductById(productId: Int, market: Market, customerId: Int): ProductResponse {
+    fun findProductById(productId: Int, market: Market, customerId: Int?): ProductResponse {
         // Constraint 1: Catalog failure fails the entire request
         val catalogProduct = catalogProductClient.findByProductIdAndMarket(
             productId = ProductId(productId.toString()),
@@ -46,7 +46,7 @@ class ProductService(
                 market = market
             )
 
-        // Constraint 4: Customer is required
+        // Constraint 4: Customer failure (or no customerId) → non-personalized response
         val customerPayload = resolveCustomerContext(customerId)
 
         return ProductResponse(

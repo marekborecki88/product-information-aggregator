@@ -55,17 +55,18 @@ func main() {
 func getCustomerContext(c *gin.Context) {
 	customerID := c.Param("customerId")
 
+	// customerID is required
 	if customerID == "" {
-		c.JSON(http.StatusOK, CustomerContext{
-			Segment: defaultSegment,
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Customer ID is required",
 		})
 		return
 	}
 
 	customerContext, exists := customerContexts[customerID]
 	if !exists {
-		c.JSON(http.StatusOK, CustomerContext{
-			Segment: defaultSegment,
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "Customer " + customerID + " not found",
 		})
 		return
 	}

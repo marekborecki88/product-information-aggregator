@@ -14,7 +14,7 @@ class ProductController(val productService: ProductService) {
     fun getProductById(
         @PathVariable("productId") productId: Int,
         @RequestParam(value = "market", required = true) market: Market,
-        @RequestParam(value = "customerId", required = true) customerId: Int
+        @RequestParam(value = "customerId", required = false) customerId: Int?
     ): ProductResponse = productService.findProductById(productId, market, customerId)
 
 }
