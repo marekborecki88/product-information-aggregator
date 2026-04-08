@@ -10,6 +10,9 @@ import com.example.aggregation_service.productdetails.application.port.out.Custo
 import com.example.aggregation_service.productdetails.application.port.out.PricingClient
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
+import com.example.aggregation_service.productdetails.infrastructure.client.dto.CustomerLookupResult
+import com.example.aggregation_service.productdetails.infrastructure.client.dto.ResolvedCustomerContext
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
@@ -18,11 +21,12 @@ class ProductService(
     private val catalogProductClient: CatalogProductClient,
     private val pricingClient: PricingClient,
     private val availabilityClient: AvailabilityClient,
-    private val customerClient: CustomerClient
+    private val customerClient: CustomerClient,
+    private val meterRegistry: MeterRegistry
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun findProductById(productId: Int, market: Market, customerId: Int?): ProductResponse {
+    fun findProductById(productId: Int, market: Market, customerId: Int): ProductResponse {
         // Constraint 1: Catalog failure fails the entire request
         val catalogProduct = catalogProductClient.findByProductIdAndMarket(
             productId = ProductId(productId.toString()),
@@ -42,13 +46,8 @@ class ProductService(
                 market = market
             )
 
-        // Constraint 4: Customer failure (or no customerId) → non-personalized response
-        val customerPayload = try {
-            customerId?.let { customerClient.findByCustomerId(it) }
-        } catch (ex: Exception) {
-            log.warn("Customer service unavailable for customerId=$customerId: ${ex.message}")
-            null
-        }
+        // Constraint 4: Customer is required
+        val customerPayload = resolveCustomerContext(customerId)
 
         return ProductResponse(
             id = productId,
@@ -57,5 +56,61 @@ class ProductService(
             availability = availabilityStatus,
             personalization = customerPayload
         )
+    }
+
+    fun resolveCustomerContext(customerId: Int?): ResolvedCustomerContext {
+        if (customerId == null) {
+            meterRegistry.counter(
+                "product_aggregator.customer_context.fallback",
+                "reason", "no_customer_id"
+            ).increment()
+
+            return ResolvedCustomerContext(
+                segment = "STANDARD",
+                preferences = emptyList(),
+                personalized = false,
+                responseDegraded = false
+            )
+        }
+
+        return when (val result = customerClient.findByCustomerId(customerId)) {
+            is CustomerLookupResult.Found -> ResolvedCustomerContext(
+                segment = result.payload.segment,
+                preferences = result.payload.preferences,
+                personalized = true,
+                responseDegraded = false
+            )
+
+            CustomerLookupResult.NotFound -> {
+                meterRegistry.counter(
+                    "product_aggregator.customer_context.fallback",
+                    "reason", "not_found"
+                ).increment()
+
+                ResolvedCustomerContext("STANDARD", emptyList(), personalized = false, responseDegraded = true)
+            }
+
+            CustomerLookupResult.TimedOut -> {
+                meterRegistry.counter(
+                    "product_aggregator.customer_context.fallback",
+                    "reason", "timeout"
+                ).increment()
+
+                ResolvedCustomerContext("STANDARD", emptyList(), personalized = false, responseDegraded = true)
+            }
+
+            is CustomerLookupResult.HttpError -> {
+                meterRegistry.counter(
+                    "product_aggregator.customer_context.fallback",
+                    "reason", "http_error"
+                ).increment()
+
+                ResolvedCustomerContext("STANDARD", emptyList(), personalized = false, responseDegraded = true)
+            }
+
+            CustomerLookupResult.NoCustomerId -> ResolvedCustomerContext(
+                "STANDARD", emptyList(), personalized = false, responseDegraded = false
+            )
+        }
     }
 }

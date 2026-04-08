@@ -2,6 +2,7 @@ package com.example.aggregation_service.productdetails.infrastructure.client
 
 import com.example.aggregation_service.productdetails.application.port.out.CustomerClient
 import com.example.aggregation_service.productdetails.infrastructure.client.config.CustomerClientProperties
+import com.example.aggregation_service.productdetails.infrastructure.client.dto.CustomerLookupResult
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CustomerPayload
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
@@ -30,31 +31,49 @@ class CustomerClientHttp(
         .requestFactory(buildRequestFactory(properties))
         .build()
 
-    override fun findByCustomerId(customerId: Int): CustomerPayload? {
+    override fun findByCustomerId(customerId: Int): CustomerLookupResult {
         val sample = Timer.start(meterRegistry)
         var outcome = "success"
         var httpStatus = "200"
+
         return try {
-            restClient.get()
+            val body = restClient.get()
                 .uri("/customer-context/{customerId}", customerId)
                 .retrieve()
                 .body(CustomerPayload::class.java)
+
+            if (body == null) {
+                outcome = "empty_body"
+                CustomerLookupResult.NotFound
+            } else {
+                CustomerLookupResult.Found(body)
+            }
         } catch (ex: ResourceAccessException) {
             outcome = "timeout"
             httpStatus = "n/a"
             log.warn("Timeout/network error fetching customer [customerId=$customerId]: ${ex.message}")
-            null
+            CustomerLookupResult.TimedOut
         } catch (ex: RestClientResponseException) {
-            outcome = "http_error"
-            httpStatus = ex.statusCode.value().toString()
+            val statusCode = ex.statusCode.value()
+            outcome = when {
+                statusCode == 404 -> "not_found"
+                statusCode >= 500 -> "http_error_5xx"
+                else -> "http_error_4xx"
+            }
+            httpStatus = statusCode.toString()
             log.warn("HTTP error fetching customer [customerId=$customerId]: ${ex.statusCode}")
-            null
+
+            return when (statusCode) {
+                404 -> CustomerLookupResult.NotFound
+                else -> CustomerLookupResult.HttpError(statusCode)
+            }
         } finally {
             sample.stop(
-                Timer.builder("customer.client.request")
-                    .tag("outcome", outcome)
-                    .tag("http.status", httpStatus)
-                    .register(meterRegistry)
+                meterRegistry.timer(
+                    "customer.client.request",
+                    "outcome", outcome,
+                    "http.status", httpStatus
+                )
             )
         }
     }

@@ -10,3 +10,18 @@ data class CustomerPreference(
     val value: String
 )
 
+sealed interface CustomerLookupResult {
+    data class Found(val payload: CustomerPayload) : CustomerLookupResult
+    data object NoCustomerId : CustomerLookupResult
+    data object NotFound : CustomerLookupResult
+    data object TimedOut : CustomerLookupResult
+    data class HttpError(val status: Int) : CustomerLookupResult
+}
+
+data class ResolvedCustomerContext(
+    val segment: String,
+    val preferences: List<CustomerPreference>,
+    val personalized: Boolean,
+    val responseDegraded: Boolean
+)
+
