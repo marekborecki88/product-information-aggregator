@@ -6,8 +6,8 @@ import com.example.aggregation_service.productdetails.domain.valueobject.Product
 import com.example.aggregation_service.productdetails.infrastructure.client.config.CatalogClientProperties
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CatalogProductPayload
 import org.slf4j.LoggerFactory
+import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Component
-import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
 
@@ -20,6 +20,10 @@ class CatalogProductClientHttp(
 
     private val restClient = RestClient.builder()
         .baseUrl(properties.baseUrl)
+        .requestFactory(SimpleClientHttpRequestFactory().apply {
+            setConnectTimeout(properties.connectTimeout)
+            setReadTimeout(properties.readTimeout)
+        })
         .build()
 
     override fun findByProductIdAndMarket(productId: ProductId, market: Market): CatalogProductPayload? {

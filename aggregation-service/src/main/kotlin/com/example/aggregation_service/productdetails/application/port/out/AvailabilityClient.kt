@@ -1,10 +1,10 @@
 package com.example.aggregation_service.productdetails.application.port.out
 
+import com.example.aggregation_service.productdetails.api.dto.AvailabilityResult
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
-import com.example.aggregation_service.productdetails.infrastructure.client.dto.ProductAvailabilityPayload
 
 interface AvailabilityClient {
-    fun findByProductIdAndMarket(productId: ProductId, market: Market): ProductAvailabilityPayload?
+    fun findByProductIdAndMarket(productId: ProductId, market: Market): AvailabilityResult
 }
 
