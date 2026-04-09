@@ -1,23 +1,25 @@
 package com.example.aggregation_service.productdetails.infrastructure.client
 
 import com.example.aggregation_service.productdetails.api.dto.AvailabilityResult
-import com.example.aggregation_service.productdetails.api.dto.AvailabilityUnknownReason
+import com.example.aggregation_service.productdetails.api.dto.AvailabilityResult.Known
+import com.example.aggregation_service.productdetails.api.dto.AvailabilityResult.Unknown
+import com.example.aggregation_service.productdetails.api.dto.UnknownReason.NOT_FOUND
+import com.example.aggregation_service.productdetails.api.dto.UnknownReason.UPSTREAM_ERROR
+import com.example.aggregation_service.productdetails.api.dto.UnknownReason.UPSTREAM_TIMEOUT
+import com.example.aggregation_service.productdetails.api.dto.UnknownReason.UPSTREAM_UNAVAILABLE
 import com.example.aggregation_service.productdetails.application.port.out.AvailabilityClient
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
-import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
 import com.example.aggregation_service.productdetails.infrastructure.client.config.HttpClientProperties
-import com.example.aggregation_service.productdetails.infrastructure.client.dto.AvailabilityPayload
-import com.example.aggregation_service.productdetails.infrastructure.client.dto.toResult
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.time.withTimeoutOrNull
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
 import org.springframework.web.client.ResourceAccessException
-import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
 import java.net.SocketTimeoutException
 
@@ -31,109 +33,53 @@ class AvailabilityClientHttp(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    private val restClient = RestClient.builder()
-        .baseUrl(properties.baseUrl)
-        .requestFactory(buildRequestFactory(properties))
-        .build()
+    private val restClient = createRestClient(properties)
 
-    override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): AvailabilityResult =
+    override suspend fun findByProductIdAndMarket(productId: Int, market: Market): AvailabilityResult =
         withContext(Dispatchers.IO) {
             val sample = Timer.start(meterRegistry)
-            try {
-                val payload = fetchAvailability(productId, market)
-                if (payload != null) {
-                    log.debug("Availability fetched [productId={}, market={}]", productId.value, market.code)
-                    sample.stop(timer("success", "200"))
-                    payload.toResult()
-                } else {
-                    log.info(
-                        "Availability service returned empty body [productId={}, market={}]",
-                        productId.value, market.code
-                    )
-                    sample.stop(timer("empty_body", "200"))
-                    AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_ERROR)
+
+            val result = fetchAvailability(productId, market)
+            when (result) {
+                is Known -> {
+                    sample.stop(timer("success"))
+                    log.debug("Availability fetched [productId=${productId}, market=${market.code}]")
                 }
-            } catch (ex: RestClientResponseException) {
-                resolveHttpError(ex, productId, market, sample)
-            } catch (ex: ResourceAccessException) {
-                resolveConnectivityError(ex, productId, market, sample)
+                is Unknown -> {
+                    sample.stop(timer(result.reason.metricTag()))
+                    when (result.reason) {
+                        NOT_FOUND -> log.warn("No availability found for productId=${productId}, market=${market.code}")
+                        UPSTREAM_ERROR -> log.error("Availability service returned server error  [productId=${productId}, market=${market.code}")
+                        UPSTREAM_TIMEOUT -> log.warn("Availability service request timed out [productId=${productId}, market=${market.code}")
+                        UPSTREAM_UNAVAILABLE -> log.error("Availability service is unreachable")
+                    }
+                }
             }
+            result
         }
 
-    private suspend fun fetchAvailability(productId: ProductId, market: Market): AvailabilityPayload? =
-        withTimeoutOrNull(properties.timeout) {
-            restClient.get()
-                .uri { it.path("/availability/{id}").queryParam("market", market.code).build(productId.value) }
-                .retrieve()
-                .body(AvailabilityPayload::class.java)
-        } ?: run {
-            log.warn("Availability client request timeout [id=${productId.value}, market=${market.code}]")
-            null
+    private suspend fun fetchAvailability(productId: Int, market: Market): AvailabilityResult =
+        try {
+            withTimeout(properties.timeout) {
+                restClient.get()
+                    .uri { it.path("/availability/{id}").queryParam("market", market.code).build(productId) }
+                    .retrieve()
+                    .body(Known::class.java)
+            } ?: Unknown(UPSTREAM_ERROR)
+        } catch (_: TimeoutCancellationException) {
+            Unknown(UPSTREAM_TIMEOUT)
+        } catch (ex: RestClientResponseException) {
+            val reason = if (ex.statusCode.value() == 404) NOT_FOUND else UPSTREAM_ERROR
+            Unknown(reason)
+        } catch (ex: ResourceAccessException) {
+            val reason = if (ex.cause is SocketTimeoutException) UPSTREAM_TIMEOUT else UPSTREAM_UNAVAILABLE
+            Unknown(reason)
         }
 
-    private fun resolveHttpError(
-        ex: RestClientResponseException,
-        productId: ProductId,
-        market: Market,
-        sample: Timer.Sample
-    ): AvailabilityResult {
-        val status = ex.statusCode.value()
-        return when {
-            status == 404 -> {
-                log.info(
-                    "Availability not found [productId={}, market={}, status={}]",
-                    productId.value, market.code, status
-                )
-                sample.stop(timer("not_found", status.toString()))
-                AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_ERROR)
-            }
 
-            status >= 500 -> {
-                log.error(
-                    "Availability service server error [productId={}, market={}, status={}]",
-                    productId.value, market.code, status, ex
-                )
-                sample.stop(timer("http_error", status.toString()))
-                AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_ERROR)
-            }
-
-            else -> {
-                log.error(
-                    "Availability service unexpected client error [productId={}, market={}, status={}]",
-                    productId.value, market.code, status, ex
-                )
-                sample.stop(timer("http_error", status.toString()))
-                AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_ERROR)
-            }
-        }
-    }
-
-    private fun resolveConnectivityError(
-        ex: ResourceAccessException,
-        productId: ProductId,
-        market: Market,
-        sample: Timer.Sample
-    ): AvailabilityResult =
-        if (ex.cause is SocketTimeoutException) {
-            log.warn(
-                "Availability service timed out [productId={}, market={}]",
-                productId.value, market.code, ex
-            )
-            sample.stop(timer("timeout", "none"))
-            AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_TIMEOUT)
-        } else {
-            log.warn(
-                "Availability service unreachable [productId={}, market={}, cause={}]",
-                productId.value, market.code, ex.message, ex
-            )
-            sample.stop(timer("unavailable", "none"))
-            AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_UNAVAILABLE)
-        }
-
-    private fun timer(outcome: String, httpStatus: String): Timer =
+    private fun timer(outcome: String): Timer =
         Timer.builder(METRIC_AVAILABILITY_CLIENT)
-            .tag("outcome", outcome)
-            .tag("http.status", httpStatus)
+            .tag(TAG_OUTCOME, outcome)
             .register(meterRegistry)
 }
 

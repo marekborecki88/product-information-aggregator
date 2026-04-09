@@ -5,25 +5,19 @@ import com.example.aggregation_service.productdetails.domain.valueobject.Money
 sealed class PricingResult {
     abstract val status: String
 
-    data class Available(
+    data class Known(
         val basePrice: Money,
         val customerDiscount: Int,
         val finalPrice: Money
     ) : PricingResult() {
-        override val status = "available"
+        override val status = "known"
     }
 
-    data class Unavailable(
-        val reason: PricingUnknownReason,
+    data class Unknown(
+        val reason: UnknownReason,
     ) : PricingResult() {
-        override val status = "unavailable"
+        override val status = "unknown"
     }
 }
 
-enum class PricingUnknownReason {
-    UPSTREAM_TIMEOUT,
-    UPSTREAM_ERROR,
-    UPSTREAM_UNAVAILABLE,
-    NO_PRICE_FOR_MARKET
-}
 

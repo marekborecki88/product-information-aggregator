@@ -13,14 +13,8 @@ sealed class AvailabilityResult {
     }
 
     data class Unknown(
-        val reason: AvailabilityUnknownReason
+        val reason: UnknownReason
     ) : AvailabilityResult() {
         override val status = "unknown"
     }
-}
-
-enum class AvailabilityUnknownReason {
-    UPSTREAM_SERVICE_UNAVAILABLE,
-    UPSTREAM_SERVICE_TIMEOUT,
-    UPSTREAM_SERVICE_ERROR
 }
