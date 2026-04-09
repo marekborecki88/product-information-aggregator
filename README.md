@@ -1,89 +1,201 @@
-# Kramp Mock Services
+# Product Information Aggregator
 
-A project containing two mock services running with Docker Compose. Both services can be configured via environment variables.
+A service that aggregates product information from multiple downstream services into a single unified response.
+The project consists of one core aggregation service written in **Kotlin / Spring Boot** and four lightweight mock services written in **Go**.
 
-## Quick Start
+---
 
-### Run with default values
+## Architecture
 
-```bash
-podman-compose up
+```
+                        ┌─────────────────────────┐
+                        │   aggregation-service   │  :8080
+                        │   (Kotlin/Spring Boot)  │
+                        └────────────┬────────────┘
+                                     │  calls in parallel
+           ┌─────────────────────────┼──────────────────────────┼──────────────────────────┐
+           ▼                         ▼                          ▼                          ▼
+  ┌─────────────────┐   ┌──────────────────────┐   ┌────────────────────────┐   ┌──────────────────────┐
+  │ catalog-mock    │   │  price-mock-service  │   │ availability-mock      │   │ customer-mock        │
+  │ service  :8081  │   │  :8082               │   │ service  :8083         │   │ service  :8084       │
+  └─────────────────┘   └──────────────────────┘   └────────────────────────┘   └──────────────────────┘
 ```
 
-- `mock-service-1`: http://localhost:8081/api/v1 (delay: 500ms)
-- `mock-service-2`: http://localhost:8082/api/v2 (delay: 3000ms)
+The aggregation service calls all four downstream services and combines their responses into one.
 
-### Run single service
+---
 
-```bash
-podman-compose up mock-service-1
-```
+## How to run the service
 
-## Configuration
-
-All parameters can be overridden via environment variables:
-
-### Available Variables
-
-| Variable | Default | Service | Description |
-|----------|---------|---------|-------------|
-| `SERVICE_PATH_1` | `/api/v1` | mock-service-1 | API endpoint path |
-| `SERVICE_PATH_2` | `/api/v2` | mock-service-2 | API endpoint path |
-| `DELAY_1` | `500` | mock-service-1 | Response delay in milliseconds |
-| `DELAY_2` | `3000` | mock-service-2 | Response delay in milliseconds |
-| `BODY_1` | `{"status": "fast"}` | mock-service-1 | JSON response body |
-| `BODY_2` | `{"status": "slow"}` | mock-service-2 | JSON response body |
-
-## Examples
-
-### Override delay for single service
+Make sure you have **Docker** and **Docker Compose** installed (or podman), then run:
 
 ```bash
-DELAY_1=2000 podman-compose up
+docker-compose up --build
 ```
-
-### Override delay for both services
+or with podman:
 
 ```bash
-DELAY_1=1000 DELAY_2=1500 podman-compose up
+podman-compose up --build
 ```
 
-### Override response body
+This will build and start all five services:
+
+| Service                  | Port  |
+|--------------------------|-------|
+| aggregation-service      | 8080  |
+| catalog-mock-service     | 8081  |
+| price-mock-service       | 8082  |
+| availability-mock-service| 8083  |
+| customer-mock-service    | 8084  |
+
+---
+
+## API
+
+### Get product details
+
+```
+GET http://localhost:8080/products/{productId}?market={market}&customerId={customerId}
+```
+
+| Parameter    | Required | Description                                               |
+|--------------|----------|-----------------------------------------------------------|
+| `productId`  | ✅        | Product identifier (mock data available for `3`)         |
+| `market`     | ✅        | Market locale, e.g. `pl-PL`, `de-DE`, `nl-NL`            |
+| `customerId` | ❌        | Customer identifier (mock data available for `1`, `2`)   |
+
+**Example request:**
 
 ```bash
-BODY_1='{"response": "success"}' podman-compose up
+curl "http://localhost:8080/products/3?market=pl-PL&customerId=1"
 ```
 
-### Override service path and delay
+---
+
+## Mock services
+
+Each mock service exposes its data endpoint and an admin endpoint to simulate latency:
+
+### Catalog mock (`catalog-mock-service`)
+| Method | Path                          | Query Parameters | Description                     |
+|--------|-------------------------------|------------------|------------------------------------|
+| GET    | `/catalog/products/:id`       | `market` (required) | Returns product catalog data    |
+| POST   | `/admin/delay`                | - | Sets response delay in ms       |
+| POST   | `/admin/error`                | - | Sets HTTP error status code     |
+
+### Price mock (`price-mock-service`)
+| Method | Path            | Query Parameters | Description                             |
+|--------|-----------------|------------------|-------------------------------------------|
+| GET    | `/prices/:id`   | `market` (required), `customerId` (optional) | Returns base price, discount & final price |
+| POST   | `/admin/delay`  | - | Sets response delay in ms               |
+| POST   | `/admin/error`  | - | Sets HTTP error status code             |
+
+### Availability mock (`availability-mock-service`)
+| Method | Path                   | Query Parameters | Description                             |
+|--------|------------------------|------------------|--------------------------------------------|
+| GET    | `/availability/:id`    | `market` (required) | Returns stock level & delivery estimate |
+| POST   | `/admin/delay`         | - | Sets response delay in ms               |
+| POST   | `/admin/error`         | - | Sets HTTP error status code             |
+
+### Customer mock (`customer-mock-service`)
+| Method | Path                              | Query Parameters | Description                        |
+|--------|-----------------------------------|-|----|  
+| GET    | `/customer-context/:customerId`   | - | Returns customer segment & preferences |
+| POST   | `/admin/delay`                    | - | Sets response delay in ms          |
+| POST   | `/admin/error`                    | - | Sets HTTP error status code        |
+
+
+**Example — get product catalog with market parameter:**
 
 ```bash
-SERVICE_PATH_1=/custom/path DELAY_1=5000 podman-compose up
+curl "http://localhost:8081/catalog/products/3?market=pl-PL"
 ```
 
-### Override multiple parameters
+**Example — get price with market and customer ID parameters:**
 
 ```bash
-SERVICE_PATH_1=/v2 DELAY_1=3000 BODY_1='{"data": "custom"}' DELAY_2=2000 podman-compose up
+curl "http://localhost:8082/prices/3?market=pl-PL&customerId=1"
 ```
 
-## Services
+**Example — get availability for specific market:**
 
-### mock-service-1
-- Port: `8081`
-- Default path: `/api/v1`
-- Default delay: `500ms`
-- Default response: `{"status": "fast"}`
+```bash
+curl "http://localhost:8083/availability/3?market=de-DE"
+```
 
-### mock-service-2
-- Port: `8082`
-- Default path: `/api/v2`
-- Default delay: `3000ms`
-- Default response: `{"status": "slow"}`
+**Example — simulate 200ms delay on catalog service:**
 
-## Usage
+```bash
+curl -X POST http://localhost:8081/admin/delay \
+     -H "Content-Type: application/json" \
+     -d '{"delayMs": 200}'
+```
+**Example — simulate 500 error on price service:**
 
-All parameters are set as environment variables in the container. The Go application must read them using `os.Getenv()`.
+```bash
+curl -X POST http://localhost:8082/admin/error \
+     -H "Content-Type: application/json" \
+     -d '{"error": 500}'
+```
 
-Example endpoints:
-- `curl http://localhost:8081/api/v1`
-- `curl http://localhost:8082/api/v2`
+**Reset error status (return to normal operation):**
+
+```bash
+curl -X POST http://localhost:8082/admin/error \
+     -H "Content-Type: application/json" \
+     -d '{}'
+```
+
+---
+
+## Health check
+
+```bash
+curl http://localhost:8080/actuator/health
+```
+
+---
+
+## Metrics
+
+The aggregation service exposes metrics for monitoring client requests to downstream services.
+
+### List all available metrics
+
+```bash
+curl http://localhost:8080/actuator/metrics
+```
+
+### Get metrics for specific client
+
+Each downstream service has metrics available:
+
+```bash
+# Availability client metrics
+curl http://localhost:8080/actuator/metrics/availability.client.request
+
+# Catalog client metrics
+curl http://localhost:8080/actuator/metrics/catalog.client.request
+
+# Price client metrics
+curl http://localhost:8080/actuator/metrics/price.client.request
+
+# Customer client metrics
+curl http://localhost:8080/actuator/metrics/customer.client.request
+```
+
+### Filter metrics by outcome
+
+Metrics can be filtered by outcome (success, timeout, error):
+
+```bash
+# Successful requests
+curl "http://localhost:8080/actuator/metrics/availability.client.request?tag=outcome:success"
+
+# Timeout requests
+curl "http://localhost:8080/actuator/metrics/availability.client.request?tag=outcome:timeout"
+
+# Error requests
+curl "http://localhost:8080/actuator/metrics/availability.client.request?tag=outcome:error"
+```
+

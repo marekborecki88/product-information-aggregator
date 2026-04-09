@@ -37,6 +37,16 @@ class GlobalExceptionHandler {
                     message = ex.message ?: "Required upstream unavailable"
                 )
             )
+
+    @ExceptionHandler(RequiredUpstreamHttpException::class)
+    fun handleRequiredUpstreamHttp(ex: RequiredUpstreamHttpException): ResponseEntity<ApiError> =
+        ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+            .body(
+                ApiError(
+                    code = "REQUIRED_UPSTREAM_HTTP_ERROR",
+                    message = ex.message ?: "Required upstream returned an unexpected HTTP error"
+                )
+            )
 }
 
 data class ApiError(

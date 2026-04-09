@@ -13,7 +13,6 @@ import org.springframework.web.client.RestClientResponseException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.web.client.ResourceAccessException
 import java.net.SocketTimeoutException

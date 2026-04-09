@@ -32,7 +32,8 @@ var availabilityByMarket = map[string]ProductAvailability{
 	},
 }
 
-var delayMs int = 0
+var delayMs int = 100
+var errorStatus int = 0
 
 func main() {
 	router := gin.Default()
@@ -43,7 +44,31 @@ func main() {
 	// Admin endpoint for setting delay
 	router.POST("/admin/delay", setDelay)
 
+	// Admin endpoint for setting error
+	router.POST("/admin/error", setError)
+
 	router.Run(":8080")
+}
+
+func setError(c *gin.Context) {
+	var body struct {
+		Error int `json:"error"`
+	}
+
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Reset if empty object or error is 0
+	if body.Error == 0 {
+		errorStatus = 0
+		c.JSON(http.StatusOK, gin.H{"message": "Error status reset", "errorStatus": errorStatus})
+		return
+	}
+
+	errorStatus = body.Error
+	c.JSON(http.StatusOK, gin.H{"message": "Error status set", "errorStatus": errorStatus})
 }
 
 func setDelay(c *gin.Context) {
@@ -61,6 +86,12 @@ func setDelay(c *gin.Context) {
 }
 
 func getAvailability(c *gin.Context) {
+	// Check if error status is set
+	if errorStatus > 0 {
+		c.JSON(errorStatus, gin.H{"error": "Service error"})
+		return
+	}
+
 	// Apply delay if set
 	if delayMs > 0 {
 		time.Sleep(time.Duration(delayMs) * time.Millisecond)
