@@ -9,7 +9,7 @@ COPY gradle ./gradle
 COPY src ./src
 
 # Build the application
-RUN chmod +x ./gradlew && ./gradlew build -x test
+RUN chmod +x ./gradlew && GRADLE_OPTS="-Xmx512m" ./gradlew build -x test --no-daemon
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine

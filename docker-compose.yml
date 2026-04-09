@@ -3,6 +3,7 @@ services:
     build: ./aggregation-service
     ports:
       - "8080:8080"
+    mem_limit: 1024m
     environment:
       - CLIENT_CATALOG_BASE_URL=http://catalog-mock-service:8080
       - CLIENT_PRICING_BASE_URL=http://price-mock-service:8080
