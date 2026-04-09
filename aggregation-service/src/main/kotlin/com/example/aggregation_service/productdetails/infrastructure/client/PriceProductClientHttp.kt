@@ -5,13 +5,14 @@ import com.example.aggregation_service.productdetails.api.dto.PricingUnknownReas
 import com.example.aggregation_service.productdetails.application.port.out.PricingClient
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
-import com.example.aggregation_service.productdetails.infrastructure.client.config.PricingClientProperties
+import com.example.aggregation_service.productdetails.infrastructure.client.config.HttpClientProperties
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.client.ClientHttpRequestFactory
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Component
@@ -26,9 +27,9 @@ private const val TAG_HTTP_STATUS = "http.status"
 
 @Component
 class PriceProductClientHttp(
-    private val properties: PricingClientProperties,
+    @Qualifier("http-client.pricing") private val properties: HttpClientProperties,
     private val meterRegistry: MeterRegistry
-) : PricingClient {
+) : PricingClient, HttpClient() {
 
     private val log = LoggerFactory.getLogger(javaClass)
 

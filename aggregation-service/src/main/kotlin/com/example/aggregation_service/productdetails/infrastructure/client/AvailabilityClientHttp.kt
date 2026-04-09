@@ -5,13 +5,12 @@ import com.example.aggregation_service.productdetails.api.dto.AvailabilityUnknow
 import com.example.aggregation_service.productdetails.application.port.out.AvailabilityClient
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
-import com.example.aggregation_service.productdetails.infrastructure.client.config.AvailabilityClientProperties
+import com.example.aggregation_service.productdetails.infrastructure.client.config.HttpClientProperties
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.AvailabilityPayload
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.toResult
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
 import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
@@ -20,18 +19,24 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.http.client.ClientHttpRequestFactory
 import java.net.SocketTimeoutException
 
 private const val METRIC_AVAILABILITY_CLIENT = "availability.client.request"
 
 @Component
 class AvailabilityClientHttp(
-    @Qualifier("availabilityRestClient") private val restClient: RestClient,
-    private val properties: AvailabilityClientProperties,
+    @Qualifier("http-client.availability") private val properties: HttpClientProperties,
     private val meterRegistry: MeterRegistry
-) : AvailabilityClient {
+) : AvailabilityClient, HttpClient() {
 
     private val log = LoggerFactory.getLogger(javaClass)
+
+    private val restClient = RestClient.builder()
+        .baseUrl(properties.baseUrl)
+        .requestFactory(buildRequestFactory(properties))
+        .build()
 
     override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): AvailabilityResult =
         withContext(Dispatchers.IO) {

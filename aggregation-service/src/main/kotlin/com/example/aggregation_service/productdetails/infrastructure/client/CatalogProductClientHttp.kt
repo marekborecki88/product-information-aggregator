@@ -3,10 +3,9 @@ package com.example.aggregation_service.productdetails.infrastructure.client
 import com.example.aggregation_service.productdetails.application.port.out.CatalogProductClient
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
-import com.example.aggregation_service.productdetails.infrastructure.client.config.CatalogClientProperties
+import com.example.aggregation_service.productdetails.infrastructure.client.config.HttpClientProperties
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CatalogProductPayload
 import org.slf4j.LoggerFactory
-import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
@@ -14,16 +13,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.springframework.beans.factory.annotation.Qualifier
 
 @Component
 class CatalogProductClientHttp(
-    private val properties: CatalogClientProperties
-) : CatalogProductClient {
+    @Qualifier("http-client.catalog") private val properties: HttpClientProperties
+) : CatalogProductClient, HttpClient() {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
     private val restClient = RestClient.builder()
         .baseUrl(properties.baseUrl)
+        .requestFactory(buildRequestFactory(properties))
         .build()
 
     override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): CatalogProductPayload? =
