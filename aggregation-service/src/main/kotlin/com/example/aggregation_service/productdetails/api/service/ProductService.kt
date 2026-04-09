@@ -4,12 +4,17 @@ import com.example.aggregation_service.productdetails.api.dto.AvailabilityResult
 import com.example.aggregation_service.productdetails.api.dto.PricingResult
 import com.example.aggregation_service.productdetails.api.dto.PricingUnknownReason
 import com.example.aggregation_service.productdetails.api.dto.ProductResponse
+import com.example.aggregation_service.productdetails.api.exception.ProductNotFoundException
+import com.example.aggregation_service.productdetails.api.exception.RequiredUpstreamHttpException
+import com.example.aggregation_service.productdetails.api.exception.RequiredUpstreamTimeoutException
+import com.example.aggregation_service.productdetails.api.exception.RequiredUpstreamUnavailableException
 import com.example.aggregation_service.productdetails.application.port.out.AvailabilityClient
 import com.example.aggregation_service.productdetails.application.port.out.CatalogProductClient
 import com.example.aggregation_service.productdetails.application.port.out.CustomerClient
 import com.example.aggregation_service.productdetails.application.port.out.PricingClient
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
+import com.example.aggregation_service.productdetails.infrastructure.client.dto.CatalogFetchResult
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CustomerLookupResult
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.ResolvedCustomerContext
 import io.micrometer.core.instrument.MeterRegistry
@@ -38,9 +43,17 @@ class ProductService(
             val availabilityDeferred = async { availabilityClient.findByProductIdAndMarket(pid, market) }
             val customerDeferred     = async { resolveCustomerContext(customerId) }
 
-            // Constraint 1: Catalog failure fails the entire request
-            val catalogProduct = catalogDeferred.await()
-                ?: throw NoSuchElementException("Product $productId not found in market ${market.code}")
+            val catalogProduct = when (val result = catalogDeferred.await()) {
+                is CatalogFetchResult.Found -> result.product
+                CatalogFetchResult.NotFound ->
+                    throw ProductNotFoundException(productId, market.code)
+                CatalogFetchResult.Timeout ->
+                    throw RequiredUpstreamTimeoutException("catalog", productId, market.code)
+                CatalogFetchResult.Unavailable ->
+                    throw RequiredUpstreamUnavailableException("catalog", productId, market.code)
+                is CatalogFetchResult.HttpError ->
+                    throw RequiredUpstreamHttpException("catalog", result.status, productId, market.code)
+            }
 
             ProductResponse(
                 id = productId,

@@ -7,3 +7,10 @@ data class CatalogProductPayload(
         val images: List<String>
 )
 
+sealed interface CatalogFetchResult {
+        data class Found(val product: CatalogProductPayload) : CatalogFetchResult
+        data object NotFound : CatalogFetchResult
+        data object Timeout : CatalogFetchResult
+        data object Unavailable : CatalogFetchResult
+        data class HttpError(val status: Int) : CatalogFetchResult
+}

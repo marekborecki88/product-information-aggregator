@@ -4,6 +4,7 @@ import com.example.aggregation_service.productdetails.application.port.out.Catal
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
 import com.example.aggregation_service.productdetails.infrastructure.client.config.HttpClientProperties
+import com.example.aggregation_service.productdetails.infrastructure.client.dto.CatalogFetchResult
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CatalogProductPayload
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -14,6 +15,7 @@ import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.web.client.ResourceAccessException
 
 @Component
 class CatalogProductClientHttp(
@@ -27,21 +29,46 @@ class CatalogProductClientHttp(
         .requestFactory(buildRequestFactory(properties))
         .build()
 
-    override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): CatalogProductPayload? =
+    override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): CatalogFetchResult =
         withContext(Dispatchers.IO) {
             try {
-                withTimeoutOrNull(properties.timeout) {
+                val payload = withTimeoutOrNull(properties.timeout) {
                     restClient.get()
                         .uri("/catalog/products/{id}?market={market}", productId.value, market.code)
                         .retrieve()
                         .body(CatalogProductPayload::class.java)
-                } ?: run {
-                    log.warn("Catalog client request timeout [id=${productId.value}, market=${market.code}]")
-                    null
+                }
+
+                if (payload != null) {
+                    CatalogFetchResult.Found(payload)
+                } else {
+                    log.warn("Catalog client request timeout [id={}, market={}]", productId.value, market.code)
+                    CatalogFetchResult.Timeout
                 }
             } catch (ex: RestClientResponseException) {
-                log.warn("Failed to fetch product [id=${productId.value}, market=${market.code}]: ${ex.statusCode}")
-                null
+                when (ex.statusCode.value()) {
+                    404 -> {
+                        log.info("Catalog product not found [id={}, market={}]", productId.value, market.code)
+                        CatalogFetchResult.NotFound
+                    }
+                    in 500..599 -> {
+                        log.warn(
+                            "Catalog service unavailable [id={}, market={}, status={}]",
+                            productId.value, market.code, ex.statusCode.value(), ex
+                        )
+                        CatalogFetchResult.Unavailable
+                    }
+                    else -> {
+                        log.warn(
+                            "Catalog service http error [id={}, market={}, status={}]",
+                            productId.value, market.code, ex.statusCode.value(), ex
+                        )
+                        CatalogFetchResult.HttpError(ex.statusCode.value())
+                    }
+                }
+            } catch (_: ResourceAccessException) {
+                log.warn("Catalog client request timeout [id={}, market={}]", productId.value, market.code)
+                CatalogFetchResult.Timeout
             }
         }
 }

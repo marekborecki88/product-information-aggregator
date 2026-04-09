@@ -13,8 +13,8 @@ data class ClientsProperties(
 
 data class HttpClientProperties(
     val baseUrl: String,
-    val connectTimeout: Duration = Duration.ofMillis(100),
-    val connectionRequestTimeout: Duration = Duration.ofMillis(100),
+    val connectTimeout: Duration = Duration.ofMillis(50),
+    val connectionRequestTimeout: Duration = Duration.ofMillis(25),
     val readTimeout: Duration = Duration.ofMillis(100),
     val timeout: Duration = Duration.ofMillis(200)
 )

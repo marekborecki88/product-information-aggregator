@@ -35,13 +35,8 @@ class PriceProductClientHttp(
 
     private val restClient = RestClient.builder()
         .baseUrl(properties.baseUrl)
-        .requestFactory(requestFactory())
+        .requestFactory(buildRequestFactory(properties))
         .build()
-
-    private fun requestFactory(): ClientHttpRequestFactory = SimpleClientHttpRequestFactory().apply {
-        setConnectTimeout(properties.connectTimeout)
-        setReadTimeout(properties.readTimeout)
-    }
 
     override suspend fun findByProductIdAndMarket(
         productId: ProductId,

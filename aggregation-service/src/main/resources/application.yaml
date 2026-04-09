@@ -2,29 +2,27 @@ spring:
   application:
     name: aggregation-service
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+
 http-clients:
   catalog:
     base-url: ${CLIENT_CATALOG_BASE_URL:http://localhost:8081}
-    connect-timeout: 100s
-    connection-request-timeout: 50ms
-    read-timeout: 100s
-    timeout: 200ms
+    read-timeout: 90ms
+    timeout: 100ms
   pricing:
     base-url: ${CLIENT_PRICING_BASE_URL:http://localhost:8082}
-    connect-timeout: 100s
-    connection-request-timeout: 50ms
-    read-timeout: 100s
-    timeout: 200ms
+    read-timeout: 130ms
+    timeout: 140ms
   availability:
     base-url: ${CLIENT_AVAILABILITY_BASE_URL:http://localhost:8083}
-    connect-timeout: 100s
-    connection-request-timeout: 50ms
-    read-timeout: 100s
-    timeout: 200ms
+    read-timeout: 160ms
+    timeout: 170ms
   customer:
     base-url: ${CLIENT_CUSTOMER_BASE_URL:http://localhost:8084}
-    connect-timeout: 200ms
-    connection-request-timeout: 50ms
-    read-timeout: 80ms
-    timeout: 200ms
+    read-timeout: 110ms
+    timeout: 120ms
 
