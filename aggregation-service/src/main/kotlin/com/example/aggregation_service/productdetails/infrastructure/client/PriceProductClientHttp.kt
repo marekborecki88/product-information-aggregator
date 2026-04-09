@@ -8,14 +8,16 @@ import com.example.aggregation_service.productdetails.domain.valueobject.Product
 import com.example.aggregation_service.productdetails.infrastructure.client.config.PricingClientProperties
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.time.withTimeoutOrNull
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import org.springframework.http.client.ClientHttpRequestFactory
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
 
 private const val METRIC_PRICING_CLIENT_REQUEST = "pricing.client.request"
@@ -24,7 +26,7 @@ private const val TAG_HTTP_STATUS = "http.status"
 
 @Component
 class PriceProductClientHttp(
-    properties: PricingClientProperties,
+    private val properties: PricingClientProperties,
     private val meterRegistry: MeterRegistry
 ) : PricingClient {
 
@@ -32,34 +34,32 @@ class PriceProductClientHttp(
 
     private val restClient = RestClient.builder()
         .baseUrl(properties.baseUrl)
-        .requestFactory(SimpleClientHttpRequestFactory().apply {
-            setConnectTimeout(properties.connectTimeout)
-            setReadTimeout(properties.readTimeout)
-        })
+        .requestFactory(requestFactory())
         .build()
 
-    override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market, customerId: Int?): PricingResult =
+    private fun requestFactory(): ClientHttpRequestFactory = SimpleClientHttpRequestFactory().apply {
+        setConnectTimeout(properties.connectTimeout)
+        setReadTimeout(properties.readTimeout)
+    }
+
+    override suspend fun findByProductIdAndMarket(
+        productId: ProductId,
+        market: Market,
+        customerId: Int?
+    ): PricingResult =
         withContext(Dispatchers.IO) {
             val timerSample = Timer.start(meterRegistry)
 
             try {
-                val pricingData = fetchPrice(productId, market, customerId)
-
-                if (pricingData != null) {
-                    log.debug(
-                        "Price fetched successfully [productId={}, market={}, customerId={}]",
-                        productId.value, market.code, customerId
-                    )
-                    timerSample.stop(pricingTimer(outcome = "success", httpStatus = "200"))
-                    pricingData
-                } else {
-                    log.info(
-                        "Pricing service returned empty body [productId={}, market={}, customerId={}]",
-                        productId.value, market.code, customerId
-                    )
-                    timerSample.stop(pricingTimer(outcome = "no_price", httpStatus = "200"))
-                    PricingResult.Unavailable(PricingUnknownReason.NO_PRICE_FOR_MARKET)
+                val result = fetchPrice(productId, market, customerId)
+                when (result) {
+                    is PricingResult.Available -> {
+                        timerSample.stop(pricingTimer(outcome = "success", httpStatus = "200"))
+                        log.debug("Price fetched successfully [productId=${productId.value}, market=${market.code}, customerId=${customerId}]")
+                    }
+                    is PricingResult.Unavailable -> timerSample.stop(pricingTimer(outcome = result.reason.metricTag(), httpStatus = "none"))
                 }
+                result
             } catch (ex: RestClientResponseException) {
                 resolveHttpError(ex, productId, market, customerId, timerSample)
             } catch (ex: ResourceAccessException) {
@@ -67,16 +67,26 @@ class PriceProductClientHttp(
             }
         }
 
-    private fun fetchPrice(productId: ProductId, market: Market, customerId: Int?): PricingResult.Available? =
-        restClient.get()
-            .uri { uriBuilder ->
-                uriBuilder.path("/prices/{id}")
-                    .queryParam("market", market.code)
-                    .apply { if (customerId != null) queryParam("customerId", customerId) }
-                    .build(productId.value)
-            }
-            .retrieve()
-            .body(PricingResult.Available::class.java)
+    private fun PricingUnknownReason.metricTag(): String = when (this) {
+        PricingUnknownReason.NO_PRICE_FOR_MARKET -> "no_price"
+        PricingUnknownReason.UPSTREAM_TIMEOUT -> "timeout"
+        PricingUnknownReason.UPSTREAM_UNAVAILABLE -> "unavailable"
+        PricingUnknownReason.UPSTREAM_ERROR -> "upstream_error"
+    }
+
+    private suspend fun fetchPrice(productId: ProductId, market: Market, customerId: Int?): PricingResult =
+        withTimeoutOrNull(properties.timeout) {
+            restClient.get()
+                .uri { uriBuilder ->
+                    uriBuilder.path("/prices/{id}")
+                        .queryParam("market", market.code)
+                        .apply { if (customerId != null) queryParam("customerId", customerId) }
+                        .build(productId.value)
+                }
+                .retrieve()
+                .body(PricingResult.Available::class.java)
+        } ?: PricingResult.Unavailable(PricingUnknownReason.UPSTREAM_TIMEOUT)
+
 
     private fun resolveHttpError(
         ex: RestClientResponseException,
@@ -97,6 +107,7 @@ class PriceProductClientHttp(
                 timerSample.stop(pricingTimer(outcome = "no_price", httpStatus = httpStatus.toString()))
                 PricingResult.Unavailable(PricingUnknownReason.NO_PRICE_FOR_MARKET)
             }
+
             httpStatus >= 500 -> {
                 // 5xx: the pricing service is up but broken — an upstream error, not a missing price.
                 log.error(
@@ -106,6 +117,7 @@ class PriceProductClientHttp(
                 timerSample.stop(pricingTimer(outcome = "http_error", httpStatus = httpStatus.toString()))
                 PricingResult.Unavailable(PricingUnknownReason.UPSTREAM_ERROR)
             }
+
             else -> {
                 // Other 4xx (400 Bad Request, 401 Unauthorized, 403 Forbidden, etc.):
                 // These signal a client-side integration problem (malformed request, missing/invalid
@@ -130,18 +142,18 @@ class PriceProductClientHttp(
         timerSample: Timer.Sample
     ): PricingResult {
         return if (ex.cause is SocketTimeoutException) {
+            timerSample.stop(pricingTimer(outcome = "timeout", httpStatus = "none"))
             log.warn(
                 "Pricing service request timed out [productId={}, market={}, customerId={}]",
                 productId.value, market.code, customerId, ex
             )
-            timerSample.stop(pricingTimer(outcome = "timeout", httpStatus = "none"))
             PricingResult.Unavailable(PricingUnknownReason.UPSTREAM_TIMEOUT)
         } else {
+            timerSample.stop(pricingTimer(outcome = "unavailable", httpStatus = "none"))
             log.warn(
                 "Pricing service is unreachable [productId={}, market={}, customerId={}, cause={}]",
                 productId.value, market.code, customerId, ex.message, ex
             )
-            timerSample.stop(pricingTimer(outcome = "timeout", httpStatus = "none"))
             PricingResult.Unavailable(PricingUnknownReason.UPSTREAM_UNAVAILABLE)
         }
     }

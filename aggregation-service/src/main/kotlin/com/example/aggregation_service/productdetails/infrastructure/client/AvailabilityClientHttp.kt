@@ -5,6 +5,7 @@ import com.example.aggregation_service.productdetails.api.dto.AvailabilityUnknow
 import com.example.aggregation_service.productdetails.application.port.out.AvailabilityClient
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
+import com.example.aggregation_service.productdetails.infrastructure.client.config.AvailabilityClientProperties
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.AvailabilityPayload
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.toResult
 import io.micrometer.core.instrument.MeterRegistry
@@ -16,7 +17,9 @@ import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.SocketTimeoutException
 
 private const val METRIC_AVAILABILITY_CLIENT = "availability.client.request"
@@ -24,6 +27,7 @@ private const val METRIC_AVAILABILITY_CLIENT = "availability.client.request"
 @Component
 class AvailabilityClientHttp(
     @Qualifier("availabilityRestClient") private val restClient: RestClient,
+    private val properties: AvailabilityClientProperties,
     private val meterRegistry: MeterRegistry
 ) : AvailabilityClient {
 
@@ -53,11 +57,16 @@ class AvailabilityClientHttp(
             }
         }
 
-    private fun fetchAvailability(productId: ProductId, market: Market): AvailabilityPayload? =
-        restClient.get()
-            .uri { it.path("/availability/{id}").queryParam("market", market.code).build(productId.value) }
-            .retrieve()
-            .body(AvailabilityPayload::class.java)
+    private suspend fun fetchAvailability(productId: ProductId, market: Market): AvailabilityPayload? =
+        withTimeoutOrNull(properties.timeout) {
+            restClient.get()
+                .uri { it.path("/availability/{id}").queryParam("market", market.code).build(productId.value) }
+                .retrieve()
+                .body(AvailabilityPayload::class.java)
+        } ?: run {
+            log.warn("Availability client request timeout [id=${productId.value}, market=${market.code}]")
+            null
+        }
 
     private fun resolveHttpError(
         ex: RestClientResponseException,

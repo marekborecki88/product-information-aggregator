@@ -5,19 +5,23 @@ spring:
 clients:
   catalog:
     base-url: ${CLIENT_CATALOG_BASE_URL:http://localhost:8081}
-    connect-timeout: 2s
-    read-timeout: 5s
+    connect-timeout: 100s
+    read-timeout: 100s
+    timeout: 200ms
   pricing:
     base-url: ${CLIENT_PRICING_BASE_URL:http://localhost:8082}
-    connect-timeout: 2s
-    read-timeout: 3s
+    connect-timeout: 100s
+    read-timeout: 100s
+    timeout: 200ms
   availability:
     base-url: ${CLIENT_AVAILABILITY_BASE_URL:http://localhost:8083}
-    connect-timeout: 2s
-    read-timeout: 3s
+    connect-timeout: 100s
+    read-timeout: 100s
+    timeout: 200ms
   customer:
     base-url: ${CLIENT_CUSTOMER_BASE_URL:http://localhost:8084}
     connect-timeout: 200ms
     connection-request-timeout: 50ms
     read-timeout: 80ms
+    timeout: 200ms
 

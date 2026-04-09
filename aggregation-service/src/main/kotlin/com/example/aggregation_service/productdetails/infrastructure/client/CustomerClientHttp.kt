@@ -7,7 +7,9 @@ import com.example.aggregation_service.productdetails.infrastructure.client.dto.
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.apache.hc.client5.http.config.ConnectionConfig
 import org.apache.hc.client5.http.config.RequestConfig
 import org.apache.hc.client5.http.impl.classic.HttpClients
@@ -22,7 +24,7 @@ import org.springframework.web.client.RestClientResponseException
 
 @Component
 class CustomerClientHttp(
-    properties: CustomerClientProperties,
+    private val properties: CustomerClientProperties,
     private val meterRegistry: MeterRegistry
 ) : CustomerClient {
 
@@ -30,7 +32,6 @@ class CustomerClientHttp(
 
     private val restClient = RestClient.builder()
         .baseUrl(properties.baseUrl)
-        .requestFactory(buildRequestFactory(properties))
         .build()
 
     override suspend fun findByCustomerId(customerId: Int): CustomerLookupResult =
@@ -40,10 +41,15 @@ class CustomerClientHttp(
             var httpStatus = "200"
 
             try {
-                val body = restClient.get()
-                    .uri("/customer-context/{customerId}", customerId)
-                    .retrieve()
-                    .body(CustomerPayload::class.java)
+                val body = withTimeoutOrNull(properties.timeout) {
+                    restClient.get()
+                        .uri("/customer-context/{customerId}", customerId)
+                        .retrieve()
+                        .body(CustomerPayload::class.java)
+                } ?: run {
+                    log.warn("Customer client request timeout customerId=$customerId")
+                    null
+                }
 
                 if (body == null) {
                     outcome = "empty_body"
@@ -77,23 +83,5 @@ class CustomerClientHttp(
                 )
             }
         }
-
-    private fun buildRequestFactory(properties: CustomerClientProperties): HttpComponentsClientHttpRequestFactory {
-        val connectionConfig = ConnectionConfig.custom()
-            .setConnectTimeout(Timeout.ofMilliseconds(properties.connectTimeout.toMillis()))
-            .build()
-        val connectionManager = PoolingHttpClientConnectionManager().apply {
-            setDefaultConnectionConfig(connectionConfig)
-        }
-        val requestConfig = RequestConfig.custom()
-            .setConnectionRequestTimeout(Timeout.ofMilliseconds(properties.connectionRequestTimeout.toMillis()))
-            .setResponseTimeout(Timeout.ofMilliseconds(properties.readTimeout.toMillis()))
-            .build()
-        val httpClient = HttpClients.custom()
-            .setConnectionManager(connectionManager)
-            .setDefaultRequestConfig(requestConfig)
-            .build()
-        return HttpComponentsClientHttpRequestFactory(httpClient)
-    }
 }
 

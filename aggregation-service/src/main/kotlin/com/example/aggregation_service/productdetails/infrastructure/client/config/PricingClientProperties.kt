@@ -6,7 +6,8 @@ import java.time.Duration
 @ConfigurationProperties(prefix = "clients.pricing")
 data class PricingClientProperties(
     val baseUrl: String,
-    val connectTimeout: Duration = Duration.ofSeconds(2),
-    val readTimeout: Duration = Duration.ofSeconds(3)
+    val connectTimeout: Duration = Duration.ofMillis(100),
+    val readTimeout: Duration = Duration.ofMillis(100),
+    val timeout: Duration = Duration.ofMillis(200)
 )
 

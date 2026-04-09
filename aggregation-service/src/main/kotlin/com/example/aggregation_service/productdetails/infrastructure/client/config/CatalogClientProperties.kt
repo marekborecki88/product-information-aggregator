@@ -6,7 +6,6 @@ import java.time.Duration
 @ConfigurationProperties(prefix = "clients.catalog")
 data class CatalogClientProperties(
     val baseUrl: String,
-    val connectTimeout: Duration = Duration.ofSeconds(2),
-    val readTimeout: Duration = Duration.ofSeconds(5)
+    val timeout: Duration = Duration.ofSeconds(400)
 )
 

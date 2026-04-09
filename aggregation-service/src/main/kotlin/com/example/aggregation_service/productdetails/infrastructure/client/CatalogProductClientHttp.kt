@@ -11,7 +11,9 @@ import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Component
 class CatalogProductClientHttp(
@@ -22,19 +24,20 @@ class CatalogProductClientHttp(
 
     private val restClient = RestClient.builder()
         .baseUrl(properties.baseUrl)
-        .requestFactory(SimpleClientHttpRequestFactory().apply {
-            setConnectTimeout(properties.connectTimeout)
-            setReadTimeout(properties.readTimeout)
-        })
         .build()
 
     override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): CatalogProductPayload? =
         withContext(Dispatchers.IO) {
             try {
-                restClient.get()
-                    .uri("/catalog/products/{id}?market={market}", productId.value, market.code)
-                    .retrieve()
-                    .body(CatalogProductPayload::class.java)
+                withTimeoutOrNull(properties.timeout) {
+                    restClient.get()
+                        .uri("/catalog/products/{id}?market={market}", productId.value, market.code)
+                        .retrieve()
+                        .body(CatalogProductPayload::class.java)
+                } ?: run {
+                    log.warn("Catalog client request timeout [id=${productId.value}, market=${market.code}]")
+                    null
+                }
             } catch (ex: RestClientResponseException) {
                 log.warn("Failed to fetch product [id=${productId.value}, market=${market.code}]: ${ex.statusCode}")
                 null
