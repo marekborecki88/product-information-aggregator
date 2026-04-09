@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -44,15 +45,39 @@ var customerContexts = map[string]CustomerContext{
 
 const defaultSegment = SegmentDefault
 
+var delayMs int = 0
+
 func main() {
 	router := gin.Default()
 
 	router.GET("/customer-context/:customerId", getCustomerContext)
+	
+	// Admin endpoint for setting delay
+	router.POST("/admin/delay", setDelay)
 
 	router.Run(":8080")
 }
 
+func setDelay(c *gin.Context) {
+	var body struct {
+		DelayMs int `json:"delayMs"`
+	}
+
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	delayMs = body.DelayMs
+	c.JSON(http.StatusOK, gin.H{"message": "Delay set", "delayMs": delayMs})
+}
+
 func getCustomerContext(c *gin.Context) {
+	// Apply delay if set
+	if delayMs > 0 {
+		time.Sleep(time.Duration(delayMs) * time.Millisecond)
+	}
+
 	customerID := c.Param("customerId")
 
 	// customerID is required

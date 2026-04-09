@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,16 +29,40 @@ type PricePayload struct {
 	FinalPrice       Money `json:"finalPrice"`
 }
 
+var delayMs int = 0
+
 func main() {
 	router := gin.Default()
 
 	// Public endpoint for getting price by product ID
 	router.GET("/prices/:id", getPrice)
 
+	// Admin endpoint for setting delay
+	router.POST("/admin/delay", setDelay)
+
 	router.Run(":8080")
 }
 
+func setDelay(c *gin.Context) {
+	var body struct {
+		DelayMs int `json:"delayMs"`
+	}
+
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	delayMs = body.DelayMs
+	c.JSON(http.StatusOK, gin.H{"message": "Delay set", "delayMs": delayMs})
+}
+
 func getPrice(c *gin.Context) {
+	// Apply delay if set
+	if delayMs > 0 {
+		time.Sleep(time.Duration(delayMs) * time.Millisecond)
+	}
+
 	productID := c.Param("id")
 	market := c.Query("market")
 	customerId := c.Query("customerId")
