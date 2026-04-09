@@ -29,6 +29,7 @@ The aggregation service calls all four downstream services and combines their re
 
 Make sure you have **Docker** and **Docker Compose** installed (or podman), then run:
 
+
 ```bash
 docker-compose up --build
 ```
@@ -36,6 +37,26 @@ or with podman:
 
 ```bash
 podman-compose up --build
+```
+
+Note: If building fails, try once again or build images independently, it can happen because of the container memory limit.
+```bash
+docker build -t aggregation-service ./aggregation-service
+docker build -t catalog-mock-service ./catalog-mock-service
+docker build -t price-mock-service ./price-mock-service
+docker build -t availability-mock-service ./availability-mock-service
+docker build -t customer-mock-service ./customer-mock-service
+```
+
+To stop the services, run:
+
+```bash
+docker-compose down -v --rmi all
+```
+or with podman: 
+
+```bash
+podman-compose down -v --rmi all
 ```
 
 This will build and start all five services:
