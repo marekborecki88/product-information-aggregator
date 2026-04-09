@@ -32,7 +32,7 @@ class CatalogProductClientHttp(
         withContext(Dispatchers.IO) {
             try {
                 restClient.get()
-                    .uri("/products/{id}?market={market}", productId.value, market.code)
+                    .uri("/catalog/products/{id}?market={market}", productId.value, market.code)
                     .retrieve()
                     .body(CatalogProductPayload::class.java)
             } catch (ex: RestClientResponseException) {

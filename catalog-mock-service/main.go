@@ -17,7 +17,7 @@ func main() {
 	router := gin.Default()
 
 	// Public endpoint for getting product by ID and market
-	router.GET("/products/:id", getProduct)
+	router.GET("/catalog/products/:id", getProduct)
 
 	router.Run(":8080")
 }
@@ -47,10 +47,10 @@ func getProduct(c *gin.Context) {
 		Description: "This is a mock product for market " + market,
 		Specs:       specs,
 		Images: []string{
-			"https://images.example.com/products/" + productID + "/main.jpg",
-			"https://images.example.com/products/" + productID + "/tractor-wheel.jpg",
-			"https://images.example.com/products/" + productID + "/tractor-engine.jpg",
-			"https://images.example.com/products/" + productID + "/tractor-cabin.jpg",
+			"https://images.example.com/catalog/products/" + productID + "/main.jpg",
+			"https://images.example.com/catalog/products/" + productID + "/tractor-wheel.jpg",
+			"https://images.example.com/catalog/products/" + productID + "/tractor-engine.jpg",
+			"https://images.example.com/catalog/products/" + productID + "/tractor-cabin.jpg",
 		},
 	}
 
