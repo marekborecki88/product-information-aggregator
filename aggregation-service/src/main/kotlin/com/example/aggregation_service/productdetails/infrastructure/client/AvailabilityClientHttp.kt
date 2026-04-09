@@ -10,17 +10,15 @@ import com.example.aggregation_service.productdetails.infrastructure.client.dto.
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.toResult
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.time.withTimeoutOrNull
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
 import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.time.withTimeoutOrNull
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.http.client.ClientHttpRequestFactory
 import java.net.SocketTimeoutException
 
 private const val METRIC_AVAILABILITY_CLIENT = "availability.client.request"
@@ -89,6 +87,7 @@ class AvailabilityClientHttp(
                 sample.stop(timer("not_found", status.toString()))
                 AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_ERROR)
             }
+
             status >= 500 -> {
                 log.error(
                     "Availability service server error [productId={}, market={}, status={}]",
@@ -97,6 +96,7 @@ class AvailabilityClientHttp(
                 sample.stop(timer("http_error", status.toString()))
                 AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_ERROR)
             }
+
             else -> {
                 log.error(
                     "Availability service unexpected client error [productId={}, market={}, status={}]",

@@ -13,8 +13,6 @@ import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.http.client.ClientHttpRequestFactory
-import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
@@ -53,7 +51,13 @@ class PriceProductClientHttp(
                         timerSample.stop(pricingTimer(outcome = "success", httpStatus = "200"))
                         log.debug("Price fetched successfully [productId=${productId.value}, market=${market.code}, customerId=${customerId}]")
                     }
-                    is PricingResult.Unavailable -> timerSample.stop(pricingTimer(outcome = result.reason.metricTag(), httpStatus = "none"))
+
+                    is PricingResult.Unavailable -> timerSample.stop(
+                        pricingTimer(
+                            outcome = result.reason.metricTag(),
+                            httpStatus = "none"
+                        )
+                    )
                 }
                 result
             } catch (ex: RestClientResponseException) {

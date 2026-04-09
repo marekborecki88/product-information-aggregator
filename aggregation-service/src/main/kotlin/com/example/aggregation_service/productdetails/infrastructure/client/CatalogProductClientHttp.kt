@@ -6,15 +6,15 @@ import com.example.aggregation_service.productdetails.domain.valueobject.Product
 import com.example.aggregation_service.productdetails.infrastructure.client.config.HttpClientProperties
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CatalogFetchResult
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CatalogProductPayload
-import org.slf4j.LoggerFactory
-import org.springframework.stereotype.Component
-import org.springframework.web.client.RestClient
-import org.springframework.web.client.RestClientResponseException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.stereotype.Component
 import org.springframework.web.client.ResourceAccessException
+import org.springframework.web.client.RestClient
+import org.springframework.web.client.RestClientResponseException
 import java.net.SocketTimeoutException
 
 @Component
@@ -51,6 +51,7 @@ class CatalogProductClientHttp(
                         log.info("Catalog product not found [id={}, market={}]", productId.value, market.code)
                         CatalogFetchResult.NotFound
                     }
+
                     else -> {
                         log.warn(
                             "Catalog service http error [id={}, market={}, status={}]",
