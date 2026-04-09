@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.web.client.ResourceAccessException
+import java.net.SocketTimeoutException
 
 @Component
 class CatalogProductClientHttp(
@@ -51,13 +52,6 @@ class CatalogProductClientHttp(
                         log.info("Catalog product not found [id={}, market={}]", productId.value, market.code)
                         CatalogFetchResult.NotFound
                     }
-                    in 500..599 -> {
-                        log.warn(
-                            "Catalog service unavailable [id={}, market={}, status={}]",
-                            productId.value, market.code, ex.statusCode.value(), ex
-                        )
-                        CatalogFetchResult.Unavailable
-                    }
                     else -> {
                         log.warn(
                             "Catalog service http error [id={}, market={}, status={}]",
@@ -66,9 +60,14 @@ class CatalogProductClientHttp(
                         CatalogFetchResult.HttpError(ex.statusCode.value())
                     }
                 }
-            } catch (_: ResourceAccessException) {
-                log.warn("Catalog client request timeout [id={}, market={}]", productId.value, market.code)
-                CatalogFetchResult.Timeout
+            } catch (ex: ResourceAccessException) {
+                if (ex.cause is SocketTimeoutException) {
+                    log.warn("Catalog client request timeout [id={}, market={}]", productId.value, market.code)
+                    CatalogFetchResult.Timeout
+                } else {
+                    log.warn("Catalog server unavailable")
+                    CatalogFetchResult.Unavailable
+                }
             }
         }
 }
