@@ -5,7 +5,7 @@ import com.example.aggregation_service.productdetails.api.dto.PricingUnknownReas
 import com.example.aggregation_service.productdetails.application.port.out.PricingClient
 import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
-import com.example.aggregation_service.productdetails.infrastructure.client.config.PriceClientProperties
+import com.example.aggregation_service.productdetails.infrastructure.client.config.PricingClientProperties
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
@@ -24,7 +24,7 @@ private const val TAG_HTTP_STATUS = "http.status"
 
 @Component
 class PriceProductClientHttp(
-    properties: PriceClientProperties,
+    properties: PricingClientProperties,
     private val meterRegistry: MeterRegistry
 ) : PricingClient {
 
