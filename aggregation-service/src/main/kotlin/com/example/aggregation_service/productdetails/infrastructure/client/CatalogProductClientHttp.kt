@@ -10,6 +10,8 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Component
 class CatalogProductClientHttp(
@@ -26,16 +28,17 @@ class CatalogProductClientHttp(
         })
         .build()
 
-    override fun findByProductIdAndMarket(productId: ProductId, market: Market): CatalogProductPayload? {
-        return try {
-            restClient.get()
-                .uri("/products/{id}?market={market}", productId.value, market.code)
-                .retrieve()
-                .body(CatalogProductPayload::class.java)
-        } catch (ex: RestClientResponseException) {
-            log.warn("Failed to fetch product [id=${productId.value}, market=${market.code}]: ${ex.statusCode}")
-            null
+    override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): CatalogProductPayload? =
+        withContext(Dispatchers.IO) {
+            try {
+                restClient.get()
+                    .uri("/products/{id}?market={market}", productId.value, market.code)
+                    .retrieve()
+                    .body(CatalogProductPayload::class.java)
+            } catch (ex: RestClientResponseException) {
+                log.warn("Failed to fetch product [id=${productId.value}, market=${market.code}]: ${ex.statusCode}")
+                null
+            }
         }
-    }
 }
 

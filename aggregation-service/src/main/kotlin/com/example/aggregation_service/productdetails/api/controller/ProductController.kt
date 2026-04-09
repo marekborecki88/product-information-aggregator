@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 class ProductController(val productService: ProductService) {
     @GetMapping("/products/{productId}")
-    fun getProductById(
+    suspend fun getProductById(
         @PathVariable("productId") productId: Int,
         @RequestParam(value = "market", required = true) market: Market,
         @RequestParam(value = "customerId", required = false) customerId: Int?

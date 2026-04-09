@@ -15,6 +15,8 @@ import org.springframework.stereotype.Component
 import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
 
 private const val METRIC_AVAILABILITY_CLIENT = "availability.client.request"
@@ -27,28 +29,29 @@ class AvailabilityClientHttp(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    override fun findByProductIdAndMarket(productId: ProductId, market: Market): AvailabilityResult {
-        val sample = Timer.start(meterRegistry)
-        return try {
-            val payload = fetchAvailability(productId, market)
-            if (payload != null) {
-                log.debug("Availability fetched [productId={}, market={}]", productId.value, market.code)
-                sample.stop(timer("success", "200"))
-                payload.toResult()
-            } else {
-                log.info(
-                    "Availability service returned empty body [productId={}, market={}]",
-                    productId.value, market.code
-                )
-                sample.stop(timer("empty_body", "200"))
-                AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_ERROR)
+    override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): AvailabilityResult =
+        withContext(Dispatchers.IO) {
+            val sample = Timer.start(meterRegistry)
+            try {
+                val payload = fetchAvailability(productId, market)
+                if (payload != null) {
+                    log.debug("Availability fetched [productId={}, market={}]", productId.value, market.code)
+                    sample.stop(timer("success", "200"))
+                    payload.toResult()
+                } else {
+                    log.info(
+                        "Availability service returned empty body [productId={}, market={}]",
+                        productId.value, market.code
+                    )
+                    sample.stop(timer("empty_body", "200"))
+                    AvailabilityResult.Unknown(AvailabilityUnknownReason.UPSTREAM_SERVICE_ERROR)
+                }
+            } catch (ex: RestClientResponseException) {
+                resolveHttpError(ex, productId, market, sample)
+            } catch (ex: ResourceAccessException) {
+                resolveConnectivityError(ex, productId, market, sample)
             }
-        } catch (ex: RestClientResponseException) {
-            resolveHttpError(ex, productId, market, sample)
-        } catch (ex: ResourceAccessException) {
-            resolveConnectivityError(ex, productId, market, sample)
         }
-    }
 
     private fun fetchAvailability(productId: ProductId, market: Market): AvailabilityPayload? =
         restClient.get()

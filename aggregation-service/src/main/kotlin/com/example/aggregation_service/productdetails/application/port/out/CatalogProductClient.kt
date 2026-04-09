@@ -5,6 +5,6 @@ import com.example.aggregation_service.productdetails.domain.valueobject.Product
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CatalogProductPayload
 
 interface CatalogProductClient {
-    fun findByProductIdAndMarket(productId: ProductId, market: Market): CatalogProductPayload?
+    suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): CatalogProductPayload?
 }
 

@@ -14,6 +14,8 @@ import org.springframework.stereotype.Component
 import org.springframework.web.client.ResourceAccessException
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientResponseException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.net.SocketTimeoutException
 
 private const val METRIC_PRICING_CLIENT_REQUEST = "pricing.client.request"
@@ -36,36 +38,34 @@ class PriceProductClientHttp(
         })
         .build()
 
-    override fun findByProductIdAndMarket(productId: ProductId, market: Market, customerId: Int?): PricingResult {
-        val timerSample = Timer.start(meterRegistry)
+    override suspend fun findByProductIdAndMarket(productId: ProductId, market: Market, customerId: Int?): PricingResult =
+        withContext(Dispatchers.IO) {
+            val timerSample = Timer.start(meterRegistry)
 
-        return try {
-            val pricingData = fetchPrice(productId, market, customerId)
+            try {
+                val pricingData = fetchPrice(productId, market, customerId)
 
-            if (pricingData != null) {
-                log.debug(
-                    "Price fetched successfully [productId={}, market={}, customerId={}]",
-                    productId.value, market.code, customerId
-                )
-                timerSample.stop(pricingTimer(outcome = "success", httpStatus = "200"))
-                pricingData
-            } else {
-                // HTTP 200 with null body: service is reachable but returned no price for this
-                // product+market combination — functionally equivalent to a business "no price".
-                // This is distinct from a 404 in logging/metrics, but maps to the same domain reason.
-                log.info(
-                    "Pricing service returned empty body [productId={}, market={}, customerId={}]",
-                    productId.value, market.code, customerId
-                )
-                timerSample.stop(pricingTimer(outcome = "no_price", httpStatus = "200"))
-                PricingResult.Unavailable(PricingUnknownReason.NO_PRICE_FOR_MARKET)
+                if (pricingData != null) {
+                    log.debug(
+                        "Price fetched successfully [productId={}, market={}, customerId={}]",
+                        productId.value, market.code, customerId
+                    )
+                    timerSample.stop(pricingTimer(outcome = "success", httpStatus = "200"))
+                    pricingData
+                } else {
+                    log.info(
+                        "Pricing service returned empty body [productId={}, market={}, customerId={}]",
+                        productId.value, market.code, customerId
+                    )
+                    timerSample.stop(pricingTimer(outcome = "no_price", httpStatus = "200"))
+                    PricingResult.Unavailable(PricingUnknownReason.NO_PRICE_FOR_MARKET)
+                }
+            } catch (ex: RestClientResponseException) {
+                resolveHttpError(ex, productId, market, customerId, timerSample)
+            } catch (ex: ResourceAccessException) {
+                resolveConnectivityError(ex, productId, market, customerId, timerSample)
             }
-        } catch (ex: RestClientResponseException) {
-            resolveHttpError(ex, productId, market, customerId, timerSample)
-        } catch (ex: ResourceAccessException) {
-            resolveConnectivityError(ex, productId, market, customerId, timerSample)
         }
-    }
 
     private fun fetchPrice(productId: ProductId, market: Market, customerId: Int?): PricingResult.Available? =
         restClient.get()

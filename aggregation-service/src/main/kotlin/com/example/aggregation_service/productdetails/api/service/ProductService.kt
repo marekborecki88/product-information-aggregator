@@ -13,6 +13,8 @@ import com.example.aggregation_service.productdetails.domain.valueobject.Product
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CustomerLookupResult
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.ResolvedCustomerContext
 import io.micrometer.core.instrument.MeterRegistry
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 
@@ -26,39 +28,33 @@ class ProductService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    fun findProductById(productId: Int, market: Market, customerId: Int?): ProductResponse {
-        // Constraint 1: Catalog failure fails the entire request
-        val catalogProduct = catalogProductClient.findByProductIdAndMarket(
-            productId = ProductId(productId.toString()),
-            market = market
-        ) ?: throw NoSuchElementException("Product $productId not found in market ${market.code}")
+    suspend fun findProductById(productId: Int, market: Market, customerId: Int?): ProductResponse =
+        coroutineScope {
+            val pid = ProductId(productId.toString())
 
-        // Constraint 2: Pricing failure → PriceStatus.Unavailable
-        val pricing: PricingResult = pricingClient.findByProductIdAndMarket(
-                productId = ProductId(productId.toString()),
-                market = market,
-                customerId = customerId
+            // Wszystkie 4 klienty odpalone równolegle — każdy na swoim włóknie
+            val catalogDeferred      = async { catalogProductClient.findByProductIdAndMarket(pid, market) }
+            val pricingDeferred      = async { pricingClient.findByProductIdAndMarket(pid, market, customerId) }
+            val availabilityDeferred = async { availabilityClient.findByProductIdAndMarket(pid, market) }
+            val customerDeferred     = async { resolveCustomerContext(customerId) }
+
+            // Constraint 1: Catalog failure fails the entire request
+            val catalogProduct = catalogDeferred.await()
+                ?: throw NoSuchElementException("Product $productId not found in market ${market.code}")
+
+            ProductResponse(
+                id = productId,
+                details = catalogProduct,
+                // Constraint 2: Pricing failure -> PriceStatus.Unavailable  (obsluzone w adapterze)
+                pricing = pricingDeferred.await(),
+                // Constraint 3: Availability failure -> AvailabilityStatus.Unknown  (obsluzone w adapterze)
+                availability = availabilityDeferred.await(),
+                // Constraint 4: Customer failure -> non-personalized  (obsluzone w resolveCustomerContext)
+                personalization = customerDeferred.await()
             )
+        }
 
-        // Constraint 3: Availability failure → AvailabilityStatus.Unknown
-        val availabilityStatus: AvailabilityResult = availabilityClient.findByProductIdAndMarket(
-                productId = ProductId(productId.toString()),
-                market = market
-            )
-
-        // Constraint 4: Customer failure (or no customerId) → non-personalized response
-        val customerPayload = resolveCustomerContext(customerId)
-
-        return ProductResponse(
-            id = productId,
-            details = catalogProduct,
-            pricing = pricing,
-            availability = availabilityStatus,
-            personalization = customerPayload
-        )
-    }
-
-    fun resolveCustomerContext(customerId: Int?): ResolvedCustomerContext {
+    suspend fun resolveCustomerContext(customerId: Int?): ResolvedCustomerContext {
         if (customerId == null) {
             meterRegistry.counter(
                 "product_aggregator.customer_context.fallback",

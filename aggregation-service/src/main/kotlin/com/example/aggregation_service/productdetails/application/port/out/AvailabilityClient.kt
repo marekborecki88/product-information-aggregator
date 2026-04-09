@@ -5,6 +5,6 @@ import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
 
 interface AvailabilityClient {
-    fun findByProductIdAndMarket(productId: ProductId, market: Market): AvailabilityResult
+    suspend fun findByProductIdAndMarket(productId: ProductId, market: Market): AvailabilityResult
 }
 

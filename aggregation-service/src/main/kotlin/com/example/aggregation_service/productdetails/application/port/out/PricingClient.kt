@@ -5,6 +5,6 @@ import com.example.aggregation_service.productdetails.domain.valueobject.Market
 import com.example.aggregation_service.productdetails.domain.valueobject.ProductId
 
 interface PricingClient {
-    fun findByProductIdAndMarket(productId: ProductId, market: Market, customerId: Int?): PricingResult
+    suspend fun findByProductIdAndMarket(productId: ProductId, market: Market, customerId: Int?): PricingResult
 }
 

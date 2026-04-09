@@ -6,6 +6,8 @@ import com.example.aggregation_service.productdetails.infrastructure.client.dto.
 import com.example.aggregation_service.productdetails.infrastructure.client.dto.CustomerPayload
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.apache.hc.client5.http.config.ConnectionConfig
 import org.apache.hc.client5.http.config.RequestConfig
 import org.apache.hc.client5.http.impl.classic.HttpClients
@@ -31,52 +33,50 @@ class CustomerClientHttp(
         .requestFactory(buildRequestFactory(properties))
         .build()
 
-    override fun findByCustomerId(customerId: Int): CustomerLookupResult {
-        val sample = Timer.start(meterRegistry)
-        var outcome = "success"
-        var httpStatus = "200"
+    override suspend fun findByCustomerId(customerId: Int): CustomerLookupResult =
+        withContext(Dispatchers.IO) {
+            val sample = Timer.start(meterRegistry)
+            var outcome = "success"
+            var httpStatus = "200"
 
-        return try {
-            val body = restClient.get()
-                .uri("/customer-context/{customerId}", customerId)
-                .retrieve()
-                .body(CustomerPayload::class.java)
+            try {
+                val body = restClient.get()
+                    .uri("/customer-context/{customerId}", customerId)
+                    .retrieve()
+                    .body(CustomerPayload::class.java)
 
-            if (body == null) {
-                outcome = "empty_body"
-                CustomerLookupResult.NotFound
-            } else {
-                CustomerLookupResult.Found(body)
-            }
-        } catch (ex: ResourceAccessException) {
-            outcome = "timeout"
-            httpStatus = "n/a"
-            log.warn("Timeout/network error fetching customer [customerId=$customerId]: ${ex.message}")
-            CustomerLookupResult.TimedOut
-        } catch (ex: RestClientResponseException) {
-            val statusCode = ex.statusCode.value()
-            outcome = when {
-                statusCode == 404 -> "not_found"
-                statusCode >= 500 -> "http_error_5xx"
-                else -> "http_error_4xx"
-            }
-            httpStatus = statusCode.toString()
-            log.warn("HTTP error fetching customer [customerId=$customerId]: ${ex.statusCode}")
-
-            return when (statusCode) {
-                404 -> CustomerLookupResult.NotFound
-                else -> CustomerLookupResult.HttpError(statusCode)
-            }
-        } finally {
-            sample.stop(
-                meterRegistry.timer(
-                    "customer.client.request",
-                    "outcome", outcome,
-                    "http.status", httpStatus
+                if (body == null) {
+                    outcome = "empty_body"
+                    CustomerLookupResult.NotFound
+                } else {
+                    CustomerLookupResult.Found(body)
+                }
+            } catch (ex: ResourceAccessException) {
+                outcome = "timeout"
+                httpStatus = "n/a"
+                log.warn("Timeout/network error fetching customer [customerId=$customerId]: ${ex.message}")
+                CustomerLookupResult.TimedOut
+            } catch (ex: RestClientResponseException) {
+                val statusCode = ex.statusCode.value()
+                outcome = when {
+                    statusCode == 404 -> "not_found"
+                    statusCode >= 500 -> "http_error_5xx"
+                    else -> "http_error_4xx"
+                }
+                httpStatus = statusCode.toString()
+                log.warn("HTTP error fetching customer [customerId=$customerId]: ${ex.statusCode}")
+                if (statusCode == 404) CustomerLookupResult.NotFound
+                else CustomerLookupResult.HttpError(statusCode)
+            } finally {
+                sample.stop(
+                    meterRegistry.timer(
+                        "customer.client.request",
+                        "outcome", outcome,
+                        "http.status", httpStatus
+                    )
                 )
-            )
+            }
         }
-    }
 
     private fun buildRequestFactory(properties: CustomerClientProperties): HttpComponentsClientHttpRequestFactory {
         val connectionConfig = ConnectionConfig.custom()
