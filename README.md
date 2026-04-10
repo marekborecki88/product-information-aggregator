@@ -220,3 +220,31 @@ curl "http://localhost:8080/actuator/metrics/availability.client.request?tag=out
 curl "http://localhost:8080/actuator/metrics/availability.client.request?tag=outcome:error"
 ```
 
+## Design decisions
+
+I've decided to mock services in Go because of its simplicity and ease of creating lightweight HTTP servers. Go's standard library provides excellent support for building RESTful APIs with minimal boilerplate, making it ideal for quickly setting up mock services.
+Mocks are more for check case to case than performance testing.
+
+I've decided to provide rich response data with information about upstream failure and reason.
+In case core upstream fail (product catalog), the response will contain only product ID and error details.
+In case customer context there is default value and information if response was degraded. It means is the response is original from upstream or default value because of upstream failure.
+
+I've decided to write main service in Kotlin, but I'm not working with Kotlin.
+
+## What I would improve with more time
+
+- Implement Circuit breaker, retry and cache, add switch to mock services to toggle between strict mode (like now, return error status when it is set and use given delay) and random mode where error is returned randomly with given probability and delay is within given range normally distributed (60% in the middle of range, and some small percent out of scope bellow and above) to make possible do performance test with all features like circuit breaker, retry and caching.
+- Add contract testing to ensure the aggregation service correctly handles responses from upstream services, including error scenarios.
+- I would add Grafana to visualize metrics and make it easier to analyze the performance of the aggregation service and its interactions with downstream services.
+- Add tests for aggregate response (3-4 hours is much less than I need to design and implemented it, even with copilot)
+
+## Answer for question 'Option A: "The Assortment team wants to add a 'Related Products' service (200ms latency, 90% reliability). How would your design accommodate this? Should it be required or optional?"'
+
+I would be optional, because it is just enricher, and less important then availability, price and customer context.
+200 ms of latency is a lot and it double the biggest latency at this moment.
+To adapt this feature I would do exactly what for other enrichers and additionally:
+- prepare caching strategy, because of high latency, to cache related products for some time and avoid calling this service for every request.
+- prepare warming-up batch to prepare cache with the most popular products for the peak time.
+- A/B testing for static cache and dynamic calculated data for related products.
+
+
